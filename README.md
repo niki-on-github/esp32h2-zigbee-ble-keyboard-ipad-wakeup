@@ -14,3 +14,5 @@ n develop
 idf.py build
 idf.py -p /dev/ttyACM0 flash
 ```
+
+Or compile for `ESP32‑C6` via `idf.py set-target esp32c6`
