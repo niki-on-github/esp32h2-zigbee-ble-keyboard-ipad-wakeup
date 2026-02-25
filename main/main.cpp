@@ -66,12 +66,8 @@ static esp_ble_adv_data_t hidd_adv_data = {
 };
 
 static esp_ble_adv_params_t hidd_adv_params = {
-    .adv_int_min = 0x20,
-    .adv_int_max = 0x30,
-    .adv_type = ADV_TYPE_IND,
-    .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
-    .channel_map = ADV_CHNL_ALL,
-    .adv_filter_policy = ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY,
+    0x20, 0x30, ADV_TYPE_IND, BLE_ADDR_TYPE_PUBLIC,
+    {0}, BLE_ADDR_TYPE_PUBLIC, ADV_CHNL_ALL, ADV_FILTER_ALLOW_SCAN_ANY_CON_ANY
 };
 
 static void hidd_event_callback(esp_hidd_cb_event_t event, esp_hidd_cb_param_t *param)
@@ -129,15 +125,17 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
         break;
     case ESP_GAP_BLE_AUTH_CMPL_EVT:
         sec_conn = true;
-        esp_bd_addr_t bd_addr;
-        memcpy(bd_addr, param->ble_security.auth_cmpl.bd_addr, sizeof(esp_bd_addr_t));
-        ESP_LOGI(HID_DEMO_TAG, "remote BD_ADDR: %08x%04x",
-                 (bd_addr[0] << 24) + (bd_addr[1] << 16) + (bd_addr[2] << 8) + bd_addr[3],
-                 (bd_addr[4] << 8) + bd_addr[5]);
-        ESP_LOGI(HID_DEMO_TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
-        ESP_LOGI(HID_DEMO_TAG, "pair status = %s", param->ble_security.auth_cmpl.success ? "success" : "fail");
-        if (!param->ble_security.auth_cmpl.success) {
-            ESP_LOGE(HID_DEMO_TAG, "fail reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+        {
+            esp_bd_addr_t bd_addr;
+            memcpy(bd_addr, param->ble_security.auth_cmpl.bd_addr, sizeof(esp_bd_addr_t));
+            ESP_LOGI(HID_DEMO_TAG, "remote BD_ADDR: %08x%04x",
+                     (bd_addr[0] << 24) + (bd_addr[1] << 16) + (bd_addr[2] << 8) + bd_addr[3],
+                     (bd_addr[4] << 8) + bd_addr[5]);
+            ESP_LOGI(HID_DEMO_TAG, "address type = %d", param->ble_security.auth_cmpl.addr_type);
+            ESP_LOGI(HID_DEMO_TAG, "pair status = %s", param->ble_security.auth_cmpl.success ? "success" : "fail");
+            if (!param->ble_security.auth_cmpl.success) {
+                ESP_LOGE(HID_DEMO_TAG, "fail reason = 0x%x", param->ble_security.auth_cmpl.fail_reason);
+            }
         }
         break;
     default:
@@ -147,7 +145,19 @@ void gap_event_handler(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *par
 
 void gatts_event_handler(esp_gatts_cb_event_t event, esp_gatt_if_t gatts_if, esp_ble_gatts_cb_param_t *param)
 {
-    // Handle GATT events here
+    switch (event) {
+    case ESP_GATTS_CONNECT_EVT:
+        ESP_LOGI(HID_DEMO_TAG, "=== GATT: CONNECT ===");
+        hid_conn_id = param->connect.conn_id;
+        break;
+    case ESP_GATTS_DISCONNECT_EVT:
+        ESP_LOGI(HID_DEMO_TAG, "=== GATT: DISCONNECT ===");
+        sec_conn = false;
+        esp_ble_gap_start_advertising(&hidd_adv_params);
+        break;
+    default:
+        break;
+    }
 }
 
 void setLED(bool value) {
@@ -249,6 +259,19 @@ extern "C" void app_main(void)
 
     while (1) {
         vTaskDelay(50 / portTICK_PERIOD_MS);
+
+        static uint32_t disconnect_timer = 0;
+        if (!sec_conn) {
+            disconnect_timer++;
+            if (disconnect_timer >= 600) {
+                ESP_LOGI(HID_DEMO_TAG, "No BLE connection for 30s, restarting...");
+                disconnect_timer = 0;
+                esp_restart();
+            }
+        } else {
+            disconnect_timer = 0;
+        }
+
         if (zbLight.getLightState())  {
             zbLight.setLight(false);
         }
