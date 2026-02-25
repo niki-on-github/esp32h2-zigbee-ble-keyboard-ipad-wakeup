@@ -263,8 +263,8 @@ extern "C" void app_main(void)
         static uint32_t disconnect_timer = 0;
         if (!sec_conn) {
             disconnect_timer++;
-            if (disconnect_timer >= 600) {
-                ESP_LOGI(HID_DEMO_TAG, "No BLE connection for 30s, restarting...");
+            if (disconnect_timer >= 1200) {
+                ESP_LOGI(HID_DEMO_TAG, "No BLE connection for 60s, restarting...");
                 disconnect_timer = 0;
                 esp_restart();
             }
